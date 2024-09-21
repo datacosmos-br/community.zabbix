@@ -219,17 +219,21 @@ import ansible_collections.community.zabbix.plugins.module_utils.helpers as zabb
 
 class TemplateInfo(ZabbixBase):
     def get_template_id(self, template_name):
-        template_id = []
         try:
-            template_list = self._zapi.template.get({"output": ["templateid"],
-                                                     "filter": {"host": template_name}})
+            if template_name == "":
+                template_list = self._zapi.template.get({
+                    "output": ["templateid", "name"],
+                })
+            else:
+                template_list = self._zapi.template.get({
+                    "output": ["templateid"],
+                    "filter": {"host": [template_name]}
+                })
+
         except Exception as e:
             self._module.fail_json(msg="Failed to get template: %s" % e)
 
-        if template_list:
-            template_id.append(template_list[0]["templateid"])
-
-        return template_id
+        return template_list
 
     def load_json_template(self, template_json, omit_date=False):
         try:
@@ -253,7 +257,7 @@ class TemplateInfo(ZabbixBase):
 
     def dump_template(self, template_id, template_type="json", omit_date=False):
         try:
-            dump = self._zapi.configuration.export({"format": template_type, "options": {"templates": template_id}})
+            dump = self._zapi.configuration.export({"format": template_type, "options": {"templates": [template_id]}})
             if template_type == "xml":
                 xmlroot = ET.fromstring(dump.encode("utf-8"))
                 # remove date field if requested
@@ -276,7 +280,7 @@ class TemplateInfo(ZabbixBase):
 def main():
     argument_spec = zabbix_utils.zabbix_common_argument_spec()
     argument_spec.update(dict(
-        template_name=dict(type="str", required=True),
+        template_name=dict(type="str", default="", required=False),
         omit_date=dict(type="bool", required=False, default=False),
         format=dict(type="str", choices=["json", "xml", "yaml", "none"], default="json")
     ))
@@ -291,31 +295,51 @@ def main():
 
     template_info = TemplateInfo(module)
 
-    template_id = template_info.get_template_id(template_name)
+    template_list = template_info.get_template_id(template_name)
 
-    if not template_id:
-        module.fail_json(msg="Template not found: %s" % template_name)
+    if not template_list:
+        module.fail_json(msg="No templates found.")
 
-    if format == "json":
+    if template_name != "":
+        template_id = template_list[0]["templateid"]
+        if format == "json":
+            module.exit_json(
+                changed=False,
+                template_id=template_id,
+                template_json=template_info.dump_template(template_id, template_type="json", omit_date=omit_date)
+            )
+        elif format == "xml":
+            module.exit_json(
+                changed=False,
+                template_id=template_id,
+                template_xml=template_info.dump_template(template_id, template_type="xml", omit_date=omit_date)
+            )
+        elif format == "yaml":
+            module.exit_json(
+                changed=False,
+                template_id=template_id,
+                template_yaml=template_info.dump_template(template_id, template_type="yaml", omit_date=omit_date)
+            )
+        elif format == "none":
+            module.exit_json(changed=False, template_id=template_id)
+
+    else:
+        all_templates_dump = []
+        for template in template_list:
+            template_id = template["templateid"]
+            template_name = template["name"]
+            template_dump = template_info.dump_template(template_id, template_type=format, omit_date=omit_date)
+            all_templates_dump.append({
+                "template_id": template_id,
+                "template_name": template_name,
+                "template_dump": template_dump
+            })
+
+        # Retorna a lista completa de templates com o dump de cada um
         module.exit_json(
             changed=False,
-            template_id=template_id[0],
-            template_json=template_info.dump_template(template_id, template_type="json", omit_date=omit_date)
+            templates=all_templates_dump
         )
-    elif format == "xml":
-        module.exit_json(
-            changed=False,
-            template_id=template_id[0],
-            template_xml=template_info.dump_template(template_id, template_type="xml", omit_date=omit_date)
-        )
-    elif format == "yaml":
-        module.exit_json(
-            changed=False,
-            template_id=template_id[0],
-            template_yaml=template_info.dump_template(template_id, template_type="yaml", omit_date=omit_date)
-        )
-    elif format == "none":
-        module.exit_json(changed=False, template_id=template_id[0])
 
 
 if __name__ == "__main__":

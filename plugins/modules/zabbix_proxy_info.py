@@ -133,19 +133,15 @@ class Proxy(ZabbixBase):
         result = {}
         if LooseVersion(self._zbx_api_version) < LooseVersion("7.0"):
             params = {
-                "filter": {
-                    "host": name
-                },
                 "selectInterface": "extend",
                 "output": "extend"
             }
         else:
             params = {
-                "filter": {
-                    "name": name
-                },
                 "output": "extend"
             }
+        if name != "":
+            params["filter"] = {"host": [name]}
 
         if hosts:
             params["selectHosts"] = ["host", "hostid"]
@@ -155,13 +151,16 @@ class Proxy(ZabbixBase):
         except Exception as e:
             self._module.fail_json(msg="Failed to get proxy information: %s" % e)
 
-        return result[0] if result else {}
+        if name != "":
+            return result[0] if result else {}
+        else:
+            return result if result else {}
 
 
 def main():
     argument_spec = zabbix_utils.zabbix_common_argument_spec()
     argument_spec.update(dict(
-        proxy_name=dict(type="str", required=True),
+        proxy_name=dict(type="str", default="", required=False),
         proxy_hosts=dict(type="bool", required=False, default=False),
     ))
 

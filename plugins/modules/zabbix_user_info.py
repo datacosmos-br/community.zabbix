@@ -114,10 +114,12 @@ class User(ZabbixBase):
     def get_user_by_user_username(self, username):
         zabbix_user = ""
         try:
-            data = {"output": "extend", "filter": {},
+            data = {"output": "extend",
                     "getAccess": True, "selectMedias": "extend",
                     "selectUsrgrps": "extend"}
-            data["filter"]["username"] = username
+
+            if username != "":
+                data["filter"] = {"username": [username]}
 
             zabbix_user = self._zapi.user.get(data)
         except Exception as e:
@@ -127,7 +129,8 @@ class User(ZabbixBase):
         if not zabbix_user:
             zabbix_user = {}
         else:
-            zabbix_user = zabbix_user[0]
+            if username != "":
+              zabbix_user = zabbix_user[0]
 
         return zabbix_user
 
@@ -135,7 +138,7 @@ class User(ZabbixBase):
 def main():
     argument_spec = zabbix_utils.zabbix_common_argument_spec()
     argument_spec.update(dict(
-        username=dict(type="str", required=True),
+        username=dict(type="str", default="", required=False),
     ))
     module = AnsibleModule(
         argument_spec=argument_spec,
